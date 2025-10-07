@@ -135,82 +135,6 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
     }));
   };
 
-  const predictFromBiomarkers = async () => {
-    const requiredBiomarkers = ['age', 'gender', 'ca199', 'creatinine', 'lyve1', 'reg1a', 'reg1b', 'tff1'];
-    const missingBiomarkers = requiredBiomarkers.filter(field => !formData[field as keyof NewPatient]);
-    
-    if (missingBiomarkers.length > 0) {
-      toast({
-        title: "Missing Biomarker Data",
-        description: `Please fill in: ${missingBiomarkers.join(', ')}`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsPredicting(true);
-
-    try {
-      const biomarkerData = {
-        age: parseFloat(formData.age),
-        sex: formData.gender === "Male" ? "M" : "F",
-        plasma_CA19_9: parseFloat(formData.ca199),
-        creatinine: parseFloat(formData.creatinine),
-        LYVE1: parseFloat(formData.lyve1),
-        REG1A: parseFloat(formData.reg1a),
-        REG1B: parseFloat(formData.reg1b),
-        TFF1: parseFloat(formData.tff1)
-      };
-
-      const response = await fetch('http://localhost:5000/api/predict/biomarkers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(biomarkerData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Prediction API failed');
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setBiomarkerPrediction(result);
-        toast({
-          title: "Biomarker Analysis Complete",
-          description: `Prediction: ${result.prediction_label} (${(result.confidence * 100).toFixed(1)}%)`,
-        });
-      } else {
-        throw new Error(result.error || 'Unknown error');
-      }
-
-    } catch (error) {
-      console.error('Biomarker prediction error:', error);
-      toast({
-        title: "Prediction Failed",
-        description: "Could not connect to prediction service. Using fallback.",
-        variant: "destructive"
-      });
-      
-      const localRiskScore = calculateLocalRiskScore();
-      setBiomarkerPrediction({
-        prediction_class: localRiskScore < 40 ? 0 : localRiskScore < 70 ? 1 : 2,
-        prediction_label: localRiskScore < 40 ? "Control" : localRiskScore < 70 ? "Benign" : "Cancer",
-        confidence: 0.75,
-        risk_score: localRiskScore,
-        probabilities: {
-          Control: localRiskScore < 40 ? 0.75 : 0.15,
-          Benign: localRiskScore >= 40 && localRiskScore < 70 ? 0.75 : 0.20,
-          Cancer: localRiskScore >= 70 ? 0.75 : 0.05
-        }
-      });
-    } finally {
-      setIsPredicting(false);
-    }
-  };
-
   const calculateLocalRiskScore = () => {
     const ca199Val = parseFloat(formData.ca199) || 0;
     const creatinineVal = parseFloat(formData.creatinine) || 0;
@@ -228,6 +152,91 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
     else if (ageVal > 50) score += 8;
 
     return Math.min(Math.max(score, 0), 100);
+  };
+
+  // NEW FUNCTION: Returns prediction result directly
+  const predictFromBiomarkersAndReturn = async (): Promise<BiomarkerPrediction | null> => {
+    const requiredBiomarkers = ['age', 'gender', 'ca199', 'creatinine', 'lyve1', 'reg1a', 'reg1b', 'tff1'];
+    const missingBiomarkers = requiredBiomarkers.filter(field => !formData[field as keyof NewPatient]);
+    
+    if (missingBiomarkers.length > 0) {
+      toast({
+        title: "Missing Biomarker Data",
+        description: `Please fill in: ${missingBiomarkers.join(', ')}`,
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    setIsPredicting(true);
+
+    try {
+      const biomarkerData = {
+        age: parseFloat(formData.age),
+        sex: formData.gender === "Male" ? "M" : "F",
+        plasma_CA19_9: parseFloat(formData.ca199),
+        creatinine: parseFloat(formData.creatinine),
+        LYVE1: parseFloat(formData.lyve1),
+        REG1A: parseFloat(formData.reg1a),
+        REG1B: parseFloat(formData.reg1b),
+        TFF1: parseFloat(formData.tff1)
+      };
+
+      console.log("🔬 Sending biomarker data to API:", biomarkerData);
+
+      const response = await fetch('http://localhost:5000/api/predict/biomarkers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(biomarkerData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Prediction API failed');
+      }
+
+      const result = await response.json();
+      console.log("✅ Prediction result:", result);
+      
+      if (result.success) {
+        setBiomarkerPrediction(result);
+        toast({
+          title: "Biomarker Analysis Complete",
+          description: `Prediction: ${result.prediction_label} (${(result.confidence * 100).toFixed(1)}%)`,
+        });
+        return result; // RETURN THE RESULT DIRECTLY
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+
+    } catch (error) {
+      console.error('❌ Biomarker prediction error:', error);
+      toast({
+        title: "Prediction Failed",
+        description: "Could not connect to prediction service. Using fallback.",
+        variant: "destructive"
+      });
+      
+      // Create fallback prediction
+      const localRiskScore = calculateLocalRiskScore();
+      const fallbackPrediction: BiomarkerPrediction = {
+        prediction_class: localRiskScore < 40 ? 0 : localRiskScore < 70 ? 1 : 2,
+        prediction_label: localRiskScore < 40 ? "Control" : localRiskScore < 70 ? "Benign" : "Cancer",
+        confidence: 0.75,
+        risk_score: localRiskScore,
+        probabilities: {
+          Control: localRiskScore < 40 ? 0.75 : 0.15,
+          Benign: localRiskScore >= 40 && localRiskScore < 70 ? 0.75 : 0.20,
+          Cancer: localRiskScore >= 70 ? 0.75 : 0.05
+        }
+      };
+      
+      setBiomarkerPrediction(fallbackPrediction);
+      return fallbackPrediction; // RETURN FALLBACK
+    } finally {
+      setIsPredicting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -248,11 +257,22 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
     }
 
     try {
-      if (!biomarkerPrediction && formData.ca199 && formData.creatinine) {
-        await predictFromBiomarkers();
+      // Get prediction result directly - FIX FOR ASYNC ISSUE
+      let predictionResult = biomarkerPrediction;
+      
+      // If biomarkers are provided, always predict
+      if (formData.ca199 && formData.creatinine && formData.lyve1 && 
+          formData.reg1a && formData.reg1b && formData.tff1) {
+        console.log("🚀 Starting automatic prediction...");
+        predictionResult = await predictFromBiomarkersAndReturn();
+        console.log("📊 Prediction result obtained:", predictionResult);
       }
 
-      const riskScore = biomarkerPrediction?.risk_score || calculateLocalRiskScore();
+      // Use the prediction result directly (not from state)
+      const riskScore = predictionResult?.risk_score || calculateLocalRiskScore();
+      
+      console.log("📈 Final risk score:", riskScore);
+      console.log("🔮 Prediction used:", predictionResult);
 
       const newPatient = {
         id: `P${String(Date.now()).slice(-3)}`,
@@ -260,7 +280,7 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
         age: parseInt(formData.age),
         gender: formData.gender,
         mrn: formData.mrn,
-        condition: formData.condition || biomarkerPrediction?.prediction_label || "Under Assessment",
+        condition: formData.condition || predictionResult?.prediction_label || "Under Assessment",
         lastVisit: new Date().toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'short',
@@ -282,23 +302,26 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
           reg1b: formData.reg1b,
           tff1: formData.tff1
         },
-        prediction: biomarkerPrediction,
+        prediction: predictionResult,
         files: {
           report: formData.reportFile,
           ctImages: formData.ctImageFiles
         }
       };
 
+      console.log("👤 New patient object:", newPatient);
+
       onAddPatient(newPatient);
 
       toast({
         title: "Patient Added Successfully!",
-        description: `${formData.name} has been added to the patient database.`
+        description: `${formData.name} has been added with risk score: ${riskScore}`,
       });
 
       resetForm();
 
     } catch (error) {
+      console.error("❌ Error adding patient:", error);
       toast({
         title: "Error Adding Patient",
         description: "There was an error adding the patient. Please try again.",
@@ -494,51 +517,13 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Biomarker Values (XGBoost Model)</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={predictFromBiomarkers}
-                disabled={isPredicting}
-              >
-                {isPredicting ? (
-                  <>
-                    <Activity className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Activity className="mr-2 h-4 w-4" />
-                    Predict Risk
-                  </>
-                )}
-              </Button>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Biomarker Values
             </CardTitle>
-            {biomarkerPrediction && (
-              <div className="mt-2 p-3 rounded-lg bg-muted">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">
-                    Prediction: <Badge variant={
-                      biomarkerPrediction.prediction_label === "Cancer" ? "destructive" :
-                      biomarkerPrediction.prediction_label === "Benign" ? "default" : "secondary"
-                    }>
-                      {biomarkerPrediction.prediction_label}
-                    </Badge>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Risk Score: {biomarkerPrediction.risk_score}/100
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Confidence: {(biomarkerPrediction.confidence * 100).toFixed(1)}% | 
-                  Control: {(biomarkerPrediction.probabilities.Control * 100).toFixed(0)}% | 
-                  Benign: {(biomarkerPrediction.probabilities.Benign * 100).toFixed(0)}% | 
-                  Cancer: {(biomarkerPrediction.probabilities.Cancer * 100).toFixed(0)}%
-                </p>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Prediction will run automatically when you add the patient
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -687,7 +672,7 @@ const AddPatient = ({ onAddPatient }: AddPatientProps) => {
             {isSubmitting ? (
               <>
                 <Activity className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
+                Adding Patient...
               </>
             ) : (
               <>

@@ -238,9 +238,10 @@ const Index = () => {
                   symptoms: selectedPatient.symptoms,     // From AddPatient form
                   medicalHistory: selectedPatient.medicalHistory // From AddPatient form
                 }}
+                biomarkerScore={selectedPatient.biomarkerScore}
+                ctImageScore={selectedPatient.ctImageScore}
               />
             )}
-
           </div>
         )}
       </main>
