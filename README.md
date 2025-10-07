@@ -1,7 +1,12 @@
 https://colab.research.google.com/drive/1x9gQJOEgT8NW0mbGAiud-xxc78mPWQim?usp=sharing
 
 
-
+in terminal
+cd pan-prognosis-ai-main---Copy\backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install flask flask-cors numpy pandas scikit-learn xgboost
+python app.py
 
 
 # Welcome to your Lovable project
